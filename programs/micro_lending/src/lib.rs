@@ -31,6 +31,12 @@ pub mod micro_lending {
             platform_fee,
             max_loan_amount,
             min_loan_amount,
-        )
+        )?;
+        Ok(())
+    }
+
+    pub fn initialize_user(ctx: Context<InitializeUser>) -> Result<()> {
+        instructions::initialize_user(ctx)?;
+        Ok(())
     }
 }
