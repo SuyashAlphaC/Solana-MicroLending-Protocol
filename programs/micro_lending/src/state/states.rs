@@ -55,7 +55,6 @@ pub struct LendingPool {
     pub total_interest_earned: u64,
     pub is_active: bool,
     pub created_at: i64,
-    pub bump: u8,
 }
 
 #[account]
@@ -72,7 +71,7 @@ pub struct Loan {
     pub amount_repaid: u64,
     pub interest_accrued: u64,
     pub status: LoanStatus,
-    #[max_len(500)]
+    #[max_len(50)]
     pub purpose: String,
     pub collateral_type: CollateralType,
     pub collateral_value: u64,

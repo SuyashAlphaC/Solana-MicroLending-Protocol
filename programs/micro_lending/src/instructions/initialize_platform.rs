@@ -13,11 +13,11 @@ pub fn initialize_platform(
 ) -> Result<()> {
     require!(
         platform_fee <= 1000,
-        MicroLendingError::InvalidPoolConfiguration
+        MicroLendingError::InvalidPlatformConfiguration
     ); // Max 10%
     require!(
         max_loan_amount > min_loan_amount,
-        MicroLendingError::InvalidPoolConfiguration
+        MicroLendingError::InvalidPlatformConfiguration
     );
 
     let platform = &mut ctx.accounts.platform;

@@ -39,4 +39,14 @@ pub mod micro_lending {
         instructions::initialize_user(ctx)?;
         Ok(())
     }
+
+    pub fn create_lending_pool(
+        ctx: Context<CreateLendingPool>,
+        pool_name: String,
+        base_interest_rate: u16,
+        max_loan_duration: i64,
+    ) -> Result<()> {
+        instructions::create_lending_pool(ctx, pool_name, base_interest_rate, max_loan_duration)?;
+        Ok(())
+    }
 }

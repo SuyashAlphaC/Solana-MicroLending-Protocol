@@ -4,4 +4,6 @@ use anchor_lang::prelude::*;
 pub enum MicroLendingError {
     #[msg("Invalid pool configuration")]
     InvalidPoolConfiguration,
+    #[msg("Invalid Platform configuration")]
+    InvalidPlatformConfiguration,
 }
