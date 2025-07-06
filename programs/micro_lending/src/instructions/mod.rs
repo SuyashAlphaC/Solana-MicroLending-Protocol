@@ -9,6 +9,7 @@ pub mod initialize_user;
 pub mod liquidate_loan;
 pub mod make_payments;
 pub mod request_loan;
+pub mod update_credit_score;
 pub mod utils;
 pub mod withdraw_from_pool;
 
@@ -23,5 +24,6 @@ pub use initialize_user::*;
 pub use liquidate_loan::*;
 pub use make_payments::*;
 pub use request_loan::*;
+pub use update_credit_score::*;
 pub use utils::*;
 pub use withdraw_from_pool::*;

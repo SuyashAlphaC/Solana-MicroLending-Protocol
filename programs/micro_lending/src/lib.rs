@@ -104,4 +104,14 @@ pub mod micro_lending {
         instructions::add_attestation(ctx, attestation_type, score, metadata, expires_at)?;
         Ok(())
     }
+
+    pub fn liquidate_loan(ctx: Context<LiquidateLoan>) -> Result<()> {
+        instructions::liquidate_loan(ctx)?;
+        Ok(())
+    }
+
+    pub fn update_credit_score(ctx: Context<UpdateCreditScore>) -> Result<()> {
+        instructions::update_credit_score(ctx)?;
+        Ok(())
+    }
 }
