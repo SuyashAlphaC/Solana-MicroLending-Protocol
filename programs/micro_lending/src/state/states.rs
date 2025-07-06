@@ -50,9 +50,12 @@ pub struct LendingPool {
     pub max_loan_duration: i64,
     pub total_deposited: u64,
     pub total_borrowed: u64,
+    pub total_shares: u64,
     pub available_liquidity: u64,
     pub active_loans: u32,
     pub total_interest_earned: u64,
+    pub total_interest_distributed: u64,
+    pub interest_per_share: u64,
     pub is_active: bool,
     pub created_at: i64,
 }
@@ -161,7 +164,9 @@ pub struct LenderDeposit {
     pub pool: Pubkey,
     pub amount_deposited: u64,
     pub shares: u64,
+    pub interest_debt: u64,
     pub interest_earned: u64,
+    pub interest_claimed: u64,
     pub deposited_at: i64,
     pub last_claim: i64,
 }

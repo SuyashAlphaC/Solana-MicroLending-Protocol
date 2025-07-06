@@ -32,4 +32,6 @@ pub enum MicroLendingError {
     Unauthorized,
     #[msg("Payment amount should be more than 0")]
     InvalidPaymentAmount,
+    #[msg("No Interest to Claim")]
+    NoInterestToClaim,
 }

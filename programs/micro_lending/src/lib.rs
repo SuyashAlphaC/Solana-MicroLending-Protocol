@@ -75,4 +75,14 @@ pub mod micro_lending {
         instructions::make_payment(ctx, payment_amount)?;
         Ok(())
     }
+
+    pub fn deposit_to_pool(ctx: Context<DepositToPool>, amount: u64) -> Result<()> {
+        instructions::deposit_to_pool(ctx, amount)?;
+        Ok(())
+    }
+
+    pub fn claim_interest(ctx: Context<ClaimInterest>) -> Result<()> {
+        instructions::claim_interest(ctx)?;
+        Ok(())
+    }
 }

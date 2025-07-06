@@ -4,6 +4,7 @@ use crate::utils::*;
 use crate::SEEDS_PLATFORM;
 use crate::SEEDS_USER;
 use anchor_lang::prelude::*;
+use anchor_spl::associated_token::AssociatedToken;
 use anchor_spl::token_interface::{
     transfer_checked, Mint, TokenAccount, TokenInterface, TransferChecked,
 };
@@ -107,6 +108,17 @@ pub fn make_payment(ctx: Context<MakePayment>, payment_amount: u64) -> Result<()
             .checked_add(net_payment)
             .unwrap();
 
+        if interest_accrued > 0 && lending_pool.total_shares > 0 {
+            // Calculate interest per share (scaled by 1e9 for precision)
+            let interest_per_share_increase =
+                (interest_accrued as u128 * 1_000_000_000) / lending_pool.total_shares as u128;
+
+            lending_pool.interest_per_share = lending_pool
+                .interest_per_share
+                .checked_add(interest_per_share_increase as u64)
+                .unwrap();
+        }
+
         lending_pool.total_interest_earned = lending_pool
             .total_interest_earned
             .checked_add(interest_accrued)
@@ -176,6 +188,7 @@ pub struct MakePayment<'info> {
         constraint = borrower_token_account.owner == borrower.key()
     )]
     pub borrower_token_account: InterfaceAccount<'info, TokenAccount>,
+    pub associated_token_program: Program<'info, AssociatedToken>,
 
     #[account(mut)]
     pub treasury_token_account: InterfaceAccount<'info, TokenAccount>,
