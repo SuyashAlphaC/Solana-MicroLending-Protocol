@@ -30,4 +30,6 @@ pub enum MicroLendingError {
     InvalidLoanState,
     #[msg(Unauthorized Signer)]
     Unauthorized,
+    #[msg("Payment amount should be more than 0")]
+    InvalidPaymentAmount,
 }

@@ -70,4 +70,9 @@ pub mod micro_lending {
         instructions::disburse_loan(ctx)?;
         Ok(())
     }
+
+    pub fn repay_loan(ctx: Context<MakePayment>, payment_amount: u64) -> Result<()> {
+        instructions::make_payment(ctx, payment_amount)?;
+        Ok(())
+    }
 }
