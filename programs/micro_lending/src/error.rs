@@ -34,4 +34,6 @@ pub enum MicroLendingError {
     InvalidPaymentAmount,
     #[msg("No Interest to Claim")]
     NoInterestToClaim,
+    #[msg("Invalid Attestation Submitted")]
+    InvalidAttestation,
 }
