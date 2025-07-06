@@ -9,6 +9,7 @@ pub mod initialize_user;
 pub mod make_payments;
 pub mod request_loan;
 pub mod utils;
+pub mod withdraw_from_pool;
 
 pub use add_attestation::*;
 pub use approve_loan::*;
@@ -21,3 +22,4 @@ pub use initialize_user::*;
 pub use make_payments::*;
 pub use request_loan::*;
 pub use utils::*;
+pub use withdraw_from_pool::*;

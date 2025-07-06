@@ -85,4 +85,23 @@ pub mod micro_lending {
         instructions::claim_interest(ctx)?;
         Ok(())
     }
+
+    pub fn withdraw_from_pool(
+        ctx: Context<WithdrawFromPool>,
+        shares_to_withdraw: u64,
+    ) -> Result<()> {
+        instructions::withdraw_from_pool(ctx, shares_to_withdraw)?;
+        Ok(())
+    }
+
+    pub fn add_attestation(
+        ctx: Context<AddAttestation>,
+        attestation_type: u8,
+        score: u16,
+        metadata: String,
+        expires_at: Option<i64>,
+    ) -> Result<()> {
+        instructions::add_attestation(ctx, attestation_type, score, metadata, expires_at)?;
+        Ok(())
+    }
 }

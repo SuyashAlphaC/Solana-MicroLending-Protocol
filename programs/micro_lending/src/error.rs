@@ -36,4 +36,8 @@ pub enum MicroLendingError {
     NoInterestToClaim,
     #[msg("Invalid Attestation Submitted")]
     InvalidAttestation,
+    #[msg("Insufficient Shares")]
+    InsufficientShares,
+    #[msg("Invalid Amount provided")]
+    InvalidAmount,
 }
