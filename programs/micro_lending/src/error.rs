@@ -40,4 +40,6 @@ pub enum MicroLendingError {
     InsufficientShares,
     #[msg("Invalid Amount provided")]
     InvalidAmount,
+    #[msg("Loan hasn't reached the due date")]
+    LoanNotYetDueForLiquidation,
 }
