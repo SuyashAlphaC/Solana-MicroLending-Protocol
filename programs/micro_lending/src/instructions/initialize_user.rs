@@ -1,4 +1,4 @@
-use crate::state::*;
+use crate::states::*;
 use crate::SEEDS_USER;
 use anchor_lang::prelude::*;
 

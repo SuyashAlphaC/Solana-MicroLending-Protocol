@@ -1,5 +1,5 @@
 use crate::error::*;
-use crate::state::*;
+use crate::states::*;
 use anchor_lang::prelude::*;
 use anchor_spl::token_interface::{Mint, TokenAccount, TokenInterface};
 
@@ -23,11 +23,11 @@ pub fn create_lending_pool(
     );
 
     let lending_pool = &mut ctx.accounts.lending_pool;
-    let clock = Clock::get()?;
+    let current = Clock::get()?.unix_timestamp;
 
     lending_pool.authority = ctx.accounts.authority.key();
     lending_pool.mint = ctx.accounts.mint.key();
-    lending_pool.token_account = ctx.accounts.token_account.key();
+    lending_pool.token_account = ctx.accounts.pool_token_account.key();
     lending_pool.name = pool_name;
     lending_pool.base_interest_rate = base_interest_rate;
     lending_pool.max_loan_duration = max_loan_duration;
@@ -37,7 +37,7 @@ pub fn create_lending_pool(
     lending_pool.active_loans = 0;
     lending_pool.total_interest_earned = 0;
     lending_pool.is_active = true;
-    lending_pool.created_at = clock.unix_timestamp;
+    lending_pool.created_at = current;
 
 
     msg!("Lending pool created: {}", lending_pool.name);
@@ -59,11 +59,11 @@ pub struct CreateLendingPool<'info> {
         init,
         payer = authority,
         token::mint = mint,
-        token::authority = token_account,
+        token::authority = pool_token_account,
         seeds = [b"pool_token_account", lending_pool.key().as_ref()],
         bump 
     )]
-    pub token_account: InterfaceAccount<'info, TokenAccount>,
+    pub pool_token_account: InterfaceAccount<'info, TokenAccount>,
 
     pub mint: InterfaceAccount<'info, Mint>,
 

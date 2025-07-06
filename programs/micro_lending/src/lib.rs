@@ -49,4 +49,25 @@ pub mod micro_lending {
         instructions::create_lending_pool(ctx, pool_name, base_interest_rate, max_loan_duration)?;
         Ok(())
     }
+
+    pub fn request_loan(
+        ctx: Context<RequestLoan>,
+        amount: u64,
+        duration_days: u32,
+        purpose: String,
+        collateral_type: u8,
+    ) -> Result<()> {
+        instructions::request_loan(ctx, amount, duration_days, purpose, collateral_type)?;
+        Ok(())
+    }
+
+    pub fn approve_loan(ctx: Context<ApproveLoan>) -> Result<()> {
+        instructions::approve_loan(ctx)?;
+        Ok(())
+    }
+
+    pub fn disburse_loan(ctx: Context<DisburseLoan>) -> Result<()> {
+        instructions::disburse_loan(ctx)?;
+        Ok(())
+    }
 }
