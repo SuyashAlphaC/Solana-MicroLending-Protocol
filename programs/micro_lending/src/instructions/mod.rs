@@ -1,4 +1,5 @@
 pub mod add_attestation;
+pub mod add_transaction_history;
 pub mod approve_loan;
 pub mod claim_interest;
 pub mod create_lending_pool;
@@ -14,6 +15,7 @@ pub mod utils;
 pub mod withdraw_from_pool;
 
 pub use add_attestation::*;
+pub use add_transaction_history::*;
 pub use approve_loan::*;
 pub use claim_interest::*;
 pub use create_lending_pool::*;

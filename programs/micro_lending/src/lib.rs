@@ -114,4 +114,25 @@ pub mod micro_lending {
         instructions::update_credit_score(ctx)?;
         Ok(())
     }
+
+    pub fn add_transaction_history(
+        ctx: Context<AddTransactionHistory>,
+        transaction_type: TransactionType,
+        amount: u64,
+        counterparty: Option<Pubkey>,
+        timestamp: i64,
+        frequency_score: u16,
+        consistency_score: u16,
+    ) -> Result<()> {
+        instructions::add_transaction_history(
+            ctx,
+            transaction_type,
+            amount,
+            counterparty,
+            timestamp,
+            frequency_score,
+            consistency_score,
+        )?;
+        Ok(())
+    }
 }
