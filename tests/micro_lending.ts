@@ -204,4 +204,58 @@ describe("micro-lending", () => {
     expect(borrowerProfile.owner.toBase58()).to.equal(borrower.publicKey.toBase58());
   });
 
+  // =================================================================================================
+  // 2. LENDING POOL MANAGEMENT
+  // =================================================================================================
+  it("Creates a new lending pool", async () => {
+    await program.methods
+      .createLendingPool(
+        "USDC Main Pool",
+        500, // 5% base interest rate
+        new BN(365) // 365 days max duration
+      )
+      .accounts({
+        authority: authority.publicKey,
+        lendingPool: lendingPoolPda,
+        poolTokenAccount: poolTokenAccount,
+        mint: mint,
+        treasury: treasuryPda,
+        platform: platformPda,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+      })
+      .rpc();
+
+    const poolAccount = await program.account.lendingPool.fetch(lendingPoolPda);
+    expect(poolAccount.name).to.equal("USDC Main Pool");
+    expect(poolAccount.baseInterestRate).to.equal(500);
+  });
+
+  it("Allows a lender to deposit into the pool", async () => {
+    const depositAmount = new BN(500 * 1_000_000); // 500 tokens
+
+    await program.methods
+      .depositToPool(depositAmount)
+      .accounts({
+        lender: lender.publicKey,
+        lenderDeposit: lenderDepositPda,
+        lendingPool: lendingPoolPda,
+        lenderTokenAccount: lenderTokenAccount,
+        poolTokenAccount: poolTokenAccount,
+        userProfile: lenderProfilePda,
+        mint: mint,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([lender])
+      .rpc();
+
+    const depositAccount = await program.account.lenderDeposit.fetch(lenderDepositPda);
+    const poolAccount = await program.account.lendingPool.fetch(lendingPoolPda);
+
+    expect(depositAccount.amountDeposited.toString()).to.equal(depositAmount.toString());
+    expect(poolAccount.availableLiquidity.toString()).to.equal(depositAmount.toString());
+  });
+
 });
