@@ -258,4 +258,111 @@ describe("micro-lending", () => {
     expect(poolAccount.availableLiquidity.toString()).to.equal(depositAmount.toString());
   });
 
+  // =================================================================================================
+  // 3. LOAN LIFECYCLE 
+  // =================================================================================================
+  it("Allows a borrower to request a loan", async () => {
+    const loanAmount = new BN(100 * 1_000_000); // 100 tokens
+    const durationDays = 30;
+
+    await program.methods
+      .requestLoan(
+        loanAmount,
+        durationDays,
+        "Startup capital",
+        0 // CollateralType: None
+      )
+      .accounts({
+        borrower: borrower.publicKey,
+        loan: loanPda,
+        lendingPool: lendingPoolPda,
+        userProfile: borrowerProfilePda,
+        platform: platformPda,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([borrower])
+      .rpc();
+
+    const loanAccount = await program.account.loan.fetch(loanPda);
+    expect(loanAccount.amount.toString()).to.equal(loanAmount.toString());
+    assert.ok(loanAccount.status.requested);
+  });
+
+  it("Allows the authority to approve a loan", async () => {
+    await program.methods
+      .approveLoan()
+      .accounts({
+        authority: authority.publicKey,
+        loan: loanPda,
+        lendingPool: lendingPoolPda,
+        platform: platformPda,
+      })
+      .rpc();
+
+    const loanAccount = await program.account.loan.fetch(loanPda);
+    assert.ok(loanAccount.status.approved);
+  });
+
+  it("Allows the authority to disburse the loan", async () => {
+    await program.methods
+      .disburseLoan()
+      .accounts({
+        authority: authority.publicKey,
+        platform: platformPda,
+        loan: loanPda,
+        lendingPool: lendingPoolPda,
+        userProfile: borrowerProfilePda,
+        poolTokenAccount: poolTokenAccount,
+        borrowerTokenAccount: borrowerTokenAccount,
+        borrower: borrower.publicKey,
+        mint: mint,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+      })
+      .rpc();
+
+    const loanAccount = await program.account.loan.fetch(loanPda);
+    assert.ok(loanAccount.status.disbursed);
+  });
+
+  it("Allows the borrower to make a full payment", async () => {
+    // Simple approach - just advance slot by a reasonable amount
+    const currentSlot = await context.banksClient.getSlot();
+    const slotsToAdvance = 30 * 24 * 60 * 60; // 30 days worth of slots (assuming 1 slot per second)
+
+    // Use warpToSlot with try-catch to handle potential errors
+    try {
+      await context.warpToSlot(currentSlot + slotsToAdvance);
+    } catch (error) {
+      console.warn("Time warp failed, continuing with current time:", error);
+    }
+    const paymentAmount = new BN(100 * 1_000_000); // 100 tokens
+
+
+    await program.methods
+      .repayLoan(paymentAmount)
+      .accounts({
+        borrower: borrower.publicKey,
+        loan: loanPda,
+        lendingPool: lendingPoolPda,
+        userProfile: borrowerProfilePda,
+        borrowerTokenAccount: borrowerTokenAccount,
+        poolTokenAccount: poolTokenAccount,
+        platform: platformPda,
+        mint: mint,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([borrower])
+      .rpc();
+
+    const updatedLoan = await program.account.loan.fetch(loanPda);
+    assert.ok(updatedLoan.status.repaid);
+    const pool = await program.account.lendingPool.fetch(lendingPoolPda);
+
+
+    const borrowerProfile = await program.account.userProfile.fetch(borrowerProfilePda);
+    expect(borrowerProfile.successfulLoans).to.equal(1);
+  });
+
 });
