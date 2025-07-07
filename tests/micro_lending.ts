@@ -153,4 +153,55 @@ describe("micro-lending", () => {
 
   });
 
+  // =================================================================================================
+  // 1. INITIALIZATION
+  // =================================================================================================
+  it("Initializes the platform", async () => {
+    const [treasury, treasuryBump] = PublicKey.findProgramAddressSync([SEEDS_TREASURY], program.programId);
+
+    await program.methods
+      .initializePlatform(
+        authority.publicKey,
+        treasuryBump,
+        100, // 1% platform fee
+        new BN(1000 * 1_000_000), // Max loan
+        new BN(10 * 1_000_000)   // Min loan
+      )
+      .accounts({
+        payer: authority.publicKey,
+      })
+      .rpc();
+
+    const platformAccount = await program.account.platform.fetch(platformPda);
+    expect(platformAccount.authority.toBase58()).to.equal(authority.publicKey.toBase58());
+    expect(platformAccount.platformFee).to.equal(100);
+    expect(platformAccount.isActive).to.be.true;
+  });
+
+  it("Initializes user profiles for lender and borrower", async () => {
+    // Initialize lender
+    await program.methods
+      .initializeUser()
+      .accounts({
+        user: lender.publicKey,
+      })
+      .signers([lender])
+      .rpc();
+
+    const lenderProfile = await program.account.userProfile.fetch(lenderProfilePda);
+    expect(lenderProfile.owner.toBase58()).to.equal(lender.publicKey.toBase58());
+
+    // Initialize borrower
+    await program.methods
+      .initializeUser()
+      .accounts({
+        user: borrower.publicKey,
+      })
+      .signers([borrower])
+      .rpc();
+
+    const borrowerProfile = await program.account.userProfile.fetch(borrowerProfilePda);
+    expect(borrowerProfile.owner.toBase58()).to.equal(borrower.publicKey.toBase58());
+  });
+
 });
