@@ -365,4 +365,52 @@ describe("micro-lending", () => {
     expect(borrowerProfile.successfulLoans).to.equal(1);
   });
 
+  // =================================================================================================
+  // 4. INTEREST AND WITHDRAWALS 
+  // =================================================================================================
+  it("Allows a lender to claim earned interest", async () => {
+    await program.methods
+      .claimInterest()
+      .accounts({
+        lender: lender.publicKey,
+        lenderDeposit: lenderDepositPda,
+        lendingPool: lendingPoolPda,
+        poolTokenAccount: poolTokenAccount,
+        lenderTokenAccount: lenderTokenAccount,
+        userProfile: lenderProfilePda,
+        mint: mint,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([lender])
+      .rpc();
+
+    const depositAccount = await program.account.lenderDeposit.fetch(lenderDepositPda);
+    expect(depositAccount.interestClaimed.gtn(0)).to.be.true;
+  });
+
+  it("Allows a lender to withdraw from the pool", async () => {
+    const depositAccountBefore = await program.account.lenderDeposit.fetch(lenderDepositPda);
+    const sharesToWithdraw = depositAccountBefore.shares;
+
+    await program.methods
+      .withdrawFromPool(sharesToWithdraw)
+      .accounts({
+        lender: lender.publicKey,
+        lenderDeposit: lenderDepositPda,
+        lendingPool: lendingPoolPda,
+        poolTokenAccount: poolTokenAccount,
+        lenderTokenAccount: lenderTokenAccount,
+        userProfile: lenderProfilePda,
+        mint: mint,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([lender])
+      .rpc();
+
+    const depositAccountAfter = await program.account.lenderDeposit.fetch(lenderDepositPda);
+    expect(depositAccountAfter.shares.eqn(0)).to.be.true;
+  });
+
 });
