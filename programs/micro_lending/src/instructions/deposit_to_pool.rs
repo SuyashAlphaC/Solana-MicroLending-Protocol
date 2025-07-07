@@ -51,6 +51,10 @@ pub fn deposit_to_pool(ctx: Context<DepositToPool>, amount: u64) -> Result<()> {
             .unwrap()
     };
     lender_deposit.shares = lender_deposit.shares.checked_add(shares_to_mint).unwrap();
+    lending_pool.total_shares = lending_pool
+        .total_shares
+        .checked_add(shares_to_mint)
+        .unwrap();
 
     // Update interest debt to current accumulated interest
     let current_interest_debt =

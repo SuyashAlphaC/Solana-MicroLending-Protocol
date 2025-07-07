@@ -42,4 +42,6 @@ pub enum MicroLendingError {
     InvalidAmount,
     #[msg("Loan hasn't reached the due date")]
     LoanNotYetDueForLiquidation,
+    #[msg("Invalid Borrower Account")]
+    InvalidBorrowerAccount,
 }

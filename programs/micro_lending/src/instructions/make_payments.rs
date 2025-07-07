@@ -28,7 +28,7 @@ pub fn make_payment(ctx: Context<MakePayment>, payment_amount: u64) -> Result<()
         calculate_simple_interest(loan.amount, loan.interest_rate, days_elapsed)?;
 
     loan.interest_accrued = interest_accrued;
-
+    msg!("Interest Accrued : {}", interest_accrued);
     // Calculate total amount owed
     let total_owed = loan
         .amount
@@ -45,7 +45,7 @@ pub fn make_payment(ctx: Context<MakePayment>, payment_amount: u64) -> Result<()
     }
 
     let total_amount_due = total_owed.checked_add(late_fee).unwrap();
-
+    msg!("Total amount due before repayment : {}", total_amount_due);
     // Validate payment amount
     require!(payment_amount > 0, MicroLendingError::InvalidPaymentAmount);
     require!(
@@ -107,6 +107,20 @@ pub fn make_payment(ctx: Context<MakePayment>, payment_amount: u64) -> Result<()
             .available_liquidity
             .checked_add(net_payment)
             .unwrap();
+
+        let actual_repayment_after_cutting_interest =
+            net_payment.checked_sub(interest_accrued).unwrap();
+        lending_pool.total_borrowed = lending_pool
+            .total_borrowed
+            .checked_sub(actual_repayment_after_cutting_interest)
+            .unwrap();
+
+        msg!(
+            "Available Liquidity in the pool : {}",
+            lending_pool.available_liquidity
+        );
+
+        msg!("Total Borrwed reduced to : {}", lending_pool.total_borrowed);
 
         if interest_accrued > 0 && lending_pool.total_shares > 0 {
             // Calculate interest per share (scaled by 1e9 for precision)
@@ -190,11 +204,16 @@ pub struct MakePayment<'info> {
     pub borrower_token_account: InterfaceAccount<'info, TokenAccount>,
     pub associated_token_program: Program<'info, AssociatedToken>,
 
-    #[account(mut)]
+    #[account(
+        init_if_needed,
+        payer = borrower,
+        associated_token::mint = mint,
+        associated_token::authority = platform,
+        associated_token::token_program = token_program,
+    )]
     pub treasury_token_account: InterfaceAccount<'info, TokenAccount>,
-
     #[account(mut)]
     pub borrower: Signer<'info>,
-
+    pub system_program: Program<'info, System>,
     pub token_program: Interface<'info, TokenInterface>,
 }

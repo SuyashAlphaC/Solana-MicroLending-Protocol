@@ -1,16 +1,156 @@
 import * as anchor from "@coral-xyz/anchor";
-import { Program } from "@coral-xyz/anchor";
+import { Program, BN } from "@coral-xyz/anchor";
 import { MicroLending } from "../target/types/micro_lending";
+import IDL from "../target/idl/micro_lending.json";
+import { createAccount, createMint, mintTo } from "spl-token-bankrun";
 
-describe("micro_lending", () => {
+import {
+  Keypair,
+  PublicKey,
+  SystemProgram,
+  LAMPORTS_PER_SOL,
+  Transaction,
+} from "@solana/web3.js";
+import {
+  getAssociatedTokenAddressSync,
+  TOKEN_PROGRAM_ID,
+  ASSOCIATED_TOKEN_PROGRAM_ID,
+  createAssociatedTokenAccountInstruction,
+  getAccount,
+  transfer,
+} from "@solana/spl-token";
+import { BankrunProvider, startAnchor } from "anchor-bankrun";
+import { assert, expect } from "chai";
+import { BanksClient, ProgramTestContext } from "solana-bankrun";
+
+describe("micro-lending", () => {
   // Configure the client to use the local cluster.
-  anchor.setProvider(anchor.AnchorProvider.env());
+  let provider: BankrunProvider;
+  let program: Program<MicroLending>;
+  let context: ProgramTestContext;
+  let banksClient: BanksClient;
+  let authority: Keypair;
+  // Keypairs for test participants
+  const lender = Keypair.generate();
+  const borrower = Keypair.generate();
+  const attester = Keypair.generate();
 
-  const program = anchor.workspace.microLending as Program<MicroLending>;
+  // Token accounts
+  let mint: PublicKey;
+  let lenderTokenAccount: PublicKey;
+  let borrowerTokenAccount: PublicKey;
+  let poolTokenAccount: PublicKey;
 
-  it("Is initialized!", async () => {
-    // Add your test here.
-    const tx = await program.methods.initialize().rpc();
-    console.log("Your transaction signature", tx);
+  // PDAs
+  let platformPda: PublicKey;
+  let treasuryPda: PublicKey;
+  let lenderProfilePda: PublicKey;
+  let borrowerProfilePda: PublicKey;
+  let lendingPoolPda: PublicKey;
+  let lenderDepositPda: PublicKey;
+  let loanPda: PublicKey;
+
+  // Constants
+  const SEEDS_PLATFORM = Buffer.from("platform");
+  const SEEDS_TREASURY = Buffer.from("treasury");
+  const SEEDS_USER = Buffer.from("user_profile");
+
+  before(async () => {
+    // Initialize using startAnchor - this will read your Anchor.toml
+    context = await startAnchor("", [], []);
+    provider = new BankrunProvider(context);
+    program = new Program<MicroLending>(IDL as MicroLending, provider);
+    banksClient = context.banksClient;
+
+    authority = provider.wallet.payer;
+
+    // Create transaction for SOL transfers
+    const transferTransaction = new Transaction();
+    transferTransaction.add(
+      SystemProgram.transfer({
+        fromPubkey: authority.publicKey,
+        toPubkey: lender.publicKey,
+        lamports: 1 * LAMPORTS_PER_SOL,
+      }),
+      SystemProgram.transfer({
+        fromPubkey: authority.publicKey,
+        toPubkey: borrower.publicKey,
+        lamports: 1 * LAMPORTS_PER_SOL,
+      }),
+      SystemProgram.transfer({
+        fromPubkey: authority.publicKey,
+        toPubkey: attester.publicKey,
+        lamports: 0.5 * LAMPORTS_PER_SOL,
+      })
+    );
+
+    // Get recent blockhash and set it for the transaction
+    const recentBlockhash = context.lastBlockhash;
+    transferTransaction.recentBlockhash = recentBlockhash;
+    transferTransaction.feePayer = authority.publicKey;
+    transferTransaction.sign(authority);
+
+    // Process the transaction
+    await context.banksClient.processTransaction(transferTransaction);
+
+    // Create a new token mint
+    mint = await createMint(
+      //@ts-ignore
+      banksClient,
+      authority,
+      authority.publicKey,
+      null,
+      6
+    );
+
+    // Create Associated Token Accounts
+    lenderTokenAccount = await createAccount(
+      //@ts-ignore
+      banksClient,
+      lender,
+      mint,
+      lender.publicKey
+    );
+
+    borrowerTokenAccount = await createAccount(
+      //@ts-ignore
+      banksClient,
+      borrower,
+      mint,
+      borrower.publicKey
+    );
+
+
+    // Mint tokens to lender and borrower
+    await mintTo(
+      //@ts-ignore
+      banksClient,
+      authority,
+      mint,
+      lenderTokenAccount,
+      authority,
+      1_000_000_000);// 1,000 tokens
+
+    await mintTo(
+      //@ts-ignore
+      banksClient,
+      authority,
+      mint,
+      borrowerTokenAccount,
+      authority,
+      1_000_000_000);// 1,000 tokens
+
+
+    // Derive PDAs
+    [platformPda] = PublicKey.findProgramAddressSync([SEEDS_PLATFORM], program.programId);
+    [treasuryPda] = PublicKey.findProgramAddressSync([SEEDS_TREASURY], program.programId);
+    [lenderProfilePda] = PublicKey.findProgramAddressSync([SEEDS_USER, lender.publicKey.toBuffer()], program.programId);
+    [borrowerProfilePda] = PublicKey.findProgramAddressSync([SEEDS_USER, borrower.publicKey.toBuffer()], program.programId);
+    [lendingPoolPda] = PublicKey.findProgramAddressSync([Buffer.from("lending_pool"), authority.publicKey.toBuffer(), mint.toBuffer()], program.programId);
+    [poolTokenAccount] = PublicKey.findProgramAddressSync([Buffer.from("pool_token_account"), lendingPoolPda.toBuffer()], program.programId);
+    [lenderDepositPda] = PublicKey.findProgramAddressSync([Buffer.from("lender_deposit"), lender.publicKey.toBuffer(), lendingPoolPda.toBuffer()], program.programId);
+    [loanPda] = PublicKey.findProgramAddressSync([Buffer.from("loan"), borrower.publicKey.toBuffer(), lendingPoolPda.toBuffer()], program.programId);
+
   });
+
 });

@@ -12,10 +12,7 @@ pub fn disburse_loan(ctx: Context<DisburseLoan>) -> Result<()> {
 
     let platform = &mut ctx.accounts.platform;
 
-    require!(
-        ctx.accounts.authority.key() == platform.authority,
-        MicroLendingError::Unauthorized
-    );
+    
     let loan = &mut ctx.accounts.loan;
     let lending_pool = &mut ctx.accounts.lending_pool;
     let user_profile = &mut ctx.accounts.user_profile;
@@ -122,11 +119,18 @@ pub struct DisburseLoan<'info> {
     )]
     pub pool_token_account: InterfaceAccount<'info, TokenAccount>,
 
+     /// CHECK: The borrower's account key must match loan.borrower for security.
+     #[account(
+        constraint = borrower.key() == loan.borrower @ MicroLendingError::InvalidBorrowerAccount
+    )]
+    pub borrower : AccountInfo<'info>,
     #[account(
+        init_if_needed,
+        payer = authority, // The authority pays for the creation of this account if it doesn't exist
         associated_token::mint = mint,
-        associated_token::authority = loan.borrower,
+        associated_token::authority = borrower,
         associated_token::token_program = token_program,
-        constraint = borrower_token_account.owner == loan.borrower
+        // constraint = borrower_token_account.owner == loan.borrower // Can keep or remove
     )]
     pub borrower_token_account: InterfaceAccount<'info, TokenAccount>,
     pub token_program: Interface<'info, TokenInterface>,

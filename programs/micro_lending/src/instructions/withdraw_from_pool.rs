@@ -42,6 +42,8 @@ pub fn withdraw_from_pool(ctx: Context<WithdrawFromPool>, shares_to_withdraw: u6
         .available_liquidity
         .checked_add(lending_pool.total_borrowed)
         .unwrap();
+
+    msg!("Total assets in pool : {}", total_assets);
     let withdraw_amount = (shares_to_withdraw as u128)
         .checked_mul(total_assets as u128)
         .unwrap()
@@ -49,6 +51,7 @@ pub fn withdraw_from_pool(ctx: Context<WithdrawFromPool>, shares_to_withdraw: u6
         .unwrap() as u64;
 
     let total_withdraw_amount = withdraw_amount.checked_add(unclaimed_interest).unwrap();
+    msg!("Total withdraw amount : {}", total_withdraw_amount);
     require!(
         lending_pool.available_liquidity >= total_withdraw_amount,
         MicroLendingError::InsufficientLiquidity
