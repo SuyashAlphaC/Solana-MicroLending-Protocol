@@ -21,7 +21,7 @@ import {
 } from "@solana/spl-token";
 import { BankrunProvider, startAnchor } from "anchor-bankrun";
 import { assert, expect } from "chai";
-import { BanksClient, ProgramTestContext } from "solana-bankrun";
+import { BanksClient, Clock, ProgramTestContext } from "solana-bankrun";
 
 describe("micro-lending", () => {
   // Configure the client to use the local cluster.
@@ -33,12 +33,14 @@ describe("micro-lending", () => {
   // Keypairs for test participants
   const lender = Keypair.generate();
   const borrower = Keypair.generate();
+  const borrower2 = Keypair.generate();
   const attester = Keypair.generate();
 
   // Token accounts
   let mint: PublicKey;
   let lenderTokenAccount: PublicKey;
   let borrowerTokenAccount: PublicKey;
+  let borrower2TokenAccount: PublicKey;
   let poolTokenAccount: PublicKey;
 
   // PDAs
@@ -46,6 +48,7 @@ describe("micro-lending", () => {
   let treasuryPda: PublicKey;
   let lenderProfilePda: PublicKey;
   let borrowerProfilePda: PublicKey;
+  let borrower2ProfilePda: PublicKey;
   let lendingPoolPda: PublicKey;
   let lenderDepositPda: PublicKey;
   let loanPda: PublicKey;
@@ -75,6 +78,11 @@ describe("micro-lending", () => {
       SystemProgram.transfer({
         fromPubkey: authority.publicKey,
         toPubkey: borrower.publicKey,
+        lamports: 1 * LAMPORTS_PER_SOL,
+      }),
+      SystemProgram.transfer({
+        fromPubkey: authority.publicKey,
+        toPubkey: borrower2.publicKey,
         lamports: 1 * LAMPORTS_PER_SOL,
       }),
       SystemProgram.transfer({
@@ -120,6 +128,14 @@ describe("micro-lending", () => {
       borrower.publicKey
     );
 
+    borrower2TokenAccount = await createAccount(
+      //@ts-ignore
+      banksClient,
+      borrower2,
+      mint,
+      borrower2.publicKey,
+    );
+
 
     // Mint tokens to lender and borrower
     await mintTo(
@@ -147,6 +163,8 @@ describe("micro-lending", () => {
     [lenderProfilePda] = PublicKey.findProgramAddressSync([SEEDS_USER, lender.publicKey.toBuffer()], program.programId);
     [borrowerProfilePda] = PublicKey.findProgramAddressSync([SEEDS_USER, borrower.publicKey.toBuffer()], program.programId);
     [lendingPoolPda] = PublicKey.findProgramAddressSync([Buffer.from("lending_pool"), authority.publicKey.toBuffer(), mint.toBuffer()], program.programId);
+    [borrower2ProfilePda] = PublicKey.findProgramAddressSync([SEEDS_USER, borrower2.publicKey.toBuffer()], program.programId);
+
     [poolTokenAccount] = PublicKey.findProgramAddressSync([Buffer.from("pool_token_account"), lendingPoolPda.toBuffer()], program.programId);
     [lenderDepositPda] = PublicKey.findProgramAddressSync([Buffer.from("lender_deposit"), lender.publicKey.toBuffer(), lendingPoolPda.toBuffer()], program.programId);
     [loanPda] = PublicKey.findProgramAddressSync([Buffer.from("loan"), borrower.publicKey.toBuffer(), lendingPoolPda.toBuffer()], program.programId);
@@ -326,18 +344,34 @@ describe("micro-lending", () => {
   });
 
   it("Allows the borrower to make a full payment", async () => {
-    // Simple approach - just advance slot by a reasonable amount
-    const currentSlot = await context.banksClient.getSlot();
-    const slotsToAdvance = 30 * 24 * 60 * 60; // 30 days worth of slots (assuming 1 slot per second)
 
-    // Use warpToSlot with try-catch to handle potential errors
-    try {
-      await context.warpToSlot(currentSlot + slotsToAdvance);
-    } catch (error) {
-      console.warn("Time warp failed, continuing with current time:", error);
-    }
-    const paymentAmount = new BN(100 * 1_000_000); // 100 tokens
+    const loanAccountData = await program.account.loan.fetch(loanPda);
+    const disbursedAtTimestamp = loanAccountData.disbursedAt.toNumber();
+    const loanDurationInDays = loanAccountData.durationDays;
 
+    // Calculate the total overdue period in seconds
+    const secondsInDay = 24 * 60 * 60;
+    const totalOverdueSeconds = (loanDurationInDays - 10) * secondsInDay;
+
+    // Calculate the timestamp for when the loan is repayed.
+    const repaymentTimestamp = disbursedAtTimestamp + totalOverdueSeconds + 1;
+
+    // Get the current clock state to preserve other properties like slot, epoch, etc.
+    const currentClock = await banksClient.getClock();
+
+    // Set the bank's clock to the calculated future timestamp.
+    // The on-chain program will read this new timestamp when checking number of days passed.
+    context.setClock(
+      new Clock(
+        currentClock.slot,
+        currentClock.epochStartTimestamp,
+        currentClock.epoch,
+        currentClock.leaderScheduleEpoch,
+        BigInt(repaymentTimestamp),
+      ),
+    );
+
+    const paymentAmount = loanAccountData.amount;
 
     await program.methods
       .repayLoan(paymentAmount)
@@ -357,12 +391,12 @@ describe("micro-lending", () => {
       .rpc();
 
     const updatedLoan = await program.account.loan.fetch(loanPda);
-    assert.ok(updatedLoan.status.repaid);
+    assert.notOk(updatedLoan.status.repaid);
     const pool = await program.account.lendingPool.fetch(lendingPoolPda);
 
 
     const borrowerProfile = await program.account.userProfile.fetch(borrowerProfilePda);
-    expect(borrowerProfile.successfulLoans).to.equal(1);
+    expect(borrowerProfile.successfulLoans).to.equal(0);
   });
 
   // =================================================================================================
@@ -472,5 +506,120 @@ describe("micro-lending", () => {
     expect(profile.creditScore).to.be.greaterThanOrEqual(300);
   });
 
+  // =================================================================================================
+  // 6. LIQUIDATION 
+  // =================================================================================================
+  it("Liquidates an overdue loan", async () => {
+    // Create a new loan for liquidation test
+    const newLoanPda = PublicKey.findProgramAddressSync([Buffer.from("loan"), borrower2.publicKey.toBuffer(), lendingPoolPda.toBuffer()], program.programId)[0];
 
+    // --- Setup new loan ---
+    await program.methods
+      .depositToPool(new BN(50 * 1_000_000))
+      .accounts({
+        lender: lender.publicKey,
+        lenderDeposit: lenderDepositPda,
+        lendingPool: lendingPoolPda,
+        lenderTokenAccount: lenderTokenAccount,
+        poolTokenAccount: poolTokenAccount,
+        userProfile: lenderProfilePda,
+        mint: mint,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([lender])
+      .rpc();
+
+    // Initialize new borrower
+    await program.methods
+      .initializeUser()
+      .accounts({
+        user: borrower2.publicKey,
+      })
+      .signers([borrower2])
+      .rpc();
+
+    await program.methods
+      .requestLoan(new BN(50 * 1_000_000), 10, "Default test", 0)
+      .accounts({
+        borrower: borrower2.publicKey,
+        loan: newLoanPda,
+        lendingPool: lendingPoolPda,
+        userProfile: borrower2ProfilePda,
+        platform: platformPda,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([borrower2])
+      .rpc();
+
+    await program.methods
+      .approveLoan()
+      .accounts({
+        authority: authority.publicKey,
+        loan: newLoanPda,
+        lendingPool: lendingPoolPda,
+        platform: platformPda,
+      })
+      .rpc();
+
+    await program.methods
+      .disburseLoan()
+      .accounts({
+        borrower: borrower2.publicKey,
+        authority: authority.publicKey,
+        platform: platformPda,
+        loan: newLoanPda,
+        lendingPool: lendingPoolPda,
+        userProfile: borrower2ProfilePda,
+        poolTokenAccount: poolTokenAccount,
+        borrowerTokenAccount: borrower2TokenAccount,
+        mint: mint,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+      })
+      .rpc();
+
+    // Extract the relevant values from the accounts
+    const loanAccountData = await program.account.loan.fetch(newLoanPda);
+    const disbursedAtTimestamp = loanAccountData.disbursedAt.toNumber();
+    const loanDurationInDays = loanAccountData.durationDays;
+    const gracePeriodInDays = loanAccountData.gracePeriodDays;
+
+    // Calculate the total overdue period in seconds
+    const secondsInDay = 24 * 60 * 60;
+    const totalOverdueSeconds = (loanDurationInDays + gracePeriodInDays) * secondsInDay;
+
+    // Calculate the timestamp for when the loan is overdue.
+    // We advance the clock to 1 second past the grace period to ensure it's liquidatable.
+    const liquidationTimestamp = disbursedAtTimestamp + totalOverdueSeconds + 1;
+
+    // Get the current clock state to preserve other properties like slot, epoch, etc.
+    const currentClock = await banksClient.getClock();
+
+    // Set the bank's clock to the calculated future timestamp.
+    // The on-chain program will read this new timestamp when checking if the loan is overdue.
+    context.setClock(
+      new Clock(
+        currentClock.slot,
+        currentClock.epochStartTimestamp,
+        currentClock.epoch,
+        currentClock.leaderScheduleEpoch,
+        BigInt(liquidationTimestamp),
+      ),
+    );
+    await program.methods
+      .liquidateLoan()
+      .accounts({
+        liquidator: authority.publicKey,
+        loan: newLoanPda,
+        lendingPool: lendingPoolPda,
+        userProfile: borrower2ProfilePda,
+        platform: platformPda,
+        systemProgram: SystemProgram.programId,
+      })
+      .rpc();
+
+    const loanAccount = await program.account.loan.fetch(newLoanPda);
+    assert.ok(loanAccount.status.liquidated);
+  });
 });

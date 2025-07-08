@@ -54,7 +54,7 @@ pub fn claim_interest(ctx: Context<ClaimInterest>) -> Result<()> {
 
     // Use the helper function to calculate unclaimed interest
     let unclaimed_interest = get_unclaimed_interest(lender_deposit, lending_pool);
-
+    msg!("unclaimed interest is {}", unclaimed_interest);
     require!(unclaimed_interest > 0, MicroLendingError::NoInterestToClaim);
 
     // Calculate total interest earned for updating the record

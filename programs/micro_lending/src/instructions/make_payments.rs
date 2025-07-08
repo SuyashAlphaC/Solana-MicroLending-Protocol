@@ -15,7 +15,7 @@ pub fn make_payment(ctx: Context<MakePayment>, payment_amount: u64) -> Result<()
     let user_profile = &mut ctx.accounts.user_profile;
     let platform = &ctx.accounts.platform;
     let current = Clock::get()?.unix_timestamp;
-
+    msg!("Borrower paying amount: {}", payment_amount);
     // Validate loan state
     require!(
         loan.status == LoanStatus::Disbursed || loan.status == LoanStatus::Active,
@@ -24,8 +24,11 @@ pub fn make_payment(ctx: Context<MakePayment>, payment_amount: u64) -> Result<()
 
     // Calculate interest accrued
     let days_elapsed = days_between(loan.disbursed_at, current);
-    let interest_accrued =
-        calculate_simple_interest(loan.amount, loan.interest_rate, days_elapsed)?;
+    let interest_accrued = calculate_simple_interest(
+        loan.amount - loan.amount_repaid,
+        loan.interest_rate,
+        days_elapsed,
+    )?;
 
     loan.interest_accrued = interest_accrued;
     msg!("Interest Accrued : {}", interest_accrued);
@@ -55,8 +58,9 @@ pub fn make_payment(ctx: Context<MakePayment>, payment_amount: u64) -> Result<()
 
     // Calculate platform fee
     let platform_fee = (payment_amount as u128 * platform.platform_fee as u128 / 10000) as u64;
+    msg!("Platform fee charged : {}", platform_fee);
     let net_payment = payment_amount.checked_sub(platform_fee).unwrap();
-
+    msg!("Net Payment after platform fee : {}", net_payment);
     // Transfer payment from borrower to pool
     let transfer_to_pool = TransferChecked {
         from: ctx.accounts.borrower_token_account.to_account_info(),
@@ -84,35 +88,42 @@ pub fn make_payment(ctx: Context<MakePayment>, payment_amount: u64) -> Result<()
 
     transfer_checked(cpi_ctx, platform_fee, decimal)?;
 
+    let net_deduction_in_borrowed_amount = net_payment.checked_sub(interest_accrued).unwrap();
+    msg!(
+        "Net deduction in borrowed amount after interest : {}",
+        net_deduction_in_borrowed_amount
+    );
     // Update loan
-    loan.amount_repaid = loan.amount_repaid.checked_add(payment_amount).unwrap();
+    loan.amount_repaid = loan
+        .amount_repaid
+        .checked_add(net_deduction_in_borrowed_amount)
+        .unwrap();
     loan.payment_count = loan.payment_count.checked_add(1).unwrap();
     loan.last_payment_date = current;
 
     // Check if loan is fully repaid
-    if loan.amount_repaid >= total_amount_due {
+    if loan.amount_repaid >= loan.amount {
         loan.status = LoanStatus::Repaid;
 
         // Update user profile
         user_profile.active_loans = user_profile.active_loans.saturating_sub(1);
         user_profile.successful_loans = user_profile.successful_loans.checked_add(1).unwrap();
 
-        user_profile.total_repaid = user_profile
-            .total_repaid
-            .checked_add(payment_amount)
-            .unwrap();
+        user_profile.total_repaid = user_profile.total_repaid.checked_add(net_payment).unwrap();
         // Update lending pool
         lending_pool.active_loans = lending_pool.active_loans.saturating_sub(1);
+        msg!(
+            "Available liquidity before repayment : {}",
+            lending_pool.available_liquidity
+        );
         lending_pool.available_liquidity = lending_pool
             .available_liquidity
             .checked_add(net_payment)
             .unwrap();
 
-        let actual_repayment_after_cutting_interest =
-            net_payment.checked_sub(interest_accrued).unwrap();
         lending_pool.total_borrowed = lending_pool
             .total_borrowed
-            .checked_sub(actual_repayment_after_cutting_interest)
+            .checked_sub(net_deduction_in_borrowed_amount)
             .unwrap();
 
         msg!(
@@ -143,6 +154,21 @@ pub fn make_payment(ctx: Context<MakePayment>, payment_amount: u64) -> Result<()
         loan.status = LoanStatus::Active;
 
         // Partial payment - update available liquidity
+        msg!(
+            "Available liquidity before repayment : {}",
+            lending_pool.available_liquidity
+        );
+
+        lending_pool.total_borrowed = lending_pool
+            .total_borrowed
+            .checked_sub(net_deduction_in_borrowed_amount)
+            .unwrap();
+
+        msg!(
+            "Total principal borrowed remains : {}",
+            lending_pool.total_borrowed
+        );
+
         lending_pool.available_liquidity = lending_pool
             .available_liquidity
             .checked_add(net_payment)
@@ -153,6 +179,22 @@ pub fn make_payment(ctx: Context<MakePayment>, payment_amount: u64) -> Result<()
             loan.borrower,
             payment_amount
         );
+
+        if interest_accrued > 0 && lending_pool.total_shares > 0 {
+            // Calculate interest per share (scaled by 1e9 for precision)
+            let interest_per_share_increase =
+                (interest_accrued as u128 * 1_000_000_000) / lending_pool.total_shares as u128;
+
+            lending_pool.interest_per_share = lending_pool
+                .interest_per_share
+                .checked_add(interest_per_share_increase as u64)
+                .unwrap();
+        }
+
+        lending_pool.total_interest_earned = lending_pool
+            .total_interest_earned
+            .checked_add(interest_accrued)
+            .unwrap();
     }
 
     Ok(())

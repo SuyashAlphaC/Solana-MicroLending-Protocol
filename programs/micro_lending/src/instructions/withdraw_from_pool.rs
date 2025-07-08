@@ -2,7 +2,7 @@ use crate::error::*;
 use crate::states::*;
 use anchor_lang::prelude::*;
 use anchor_spl::associated_token::AssociatedToken;
-use anchor_spl::token;
+
 use anchor_spl::token_interface::{
     transfer_checked, Mint, TokenAccount, TokenInterface, TransferChecked,
 };
@@ -22,6 +22,7 @@ pub fn withdraw_from_pool(ctx: Context<WithdrawFromPool>, shares_to_withdraw: u6
         (lender_deposit.shares as u128 * lending_pool.interest_per_share as u128 / 1_000_000_000)
             .saturating_sub(lender_deposit.interest_debt as u128) as u64;
 
+    msg!("Uncalimed Interest : {}", unclaimed_interest);
     if unclaimed_interest > 0 {
         lender_deposit.interest_claimed = lender_deposit
             .interest_claimed
